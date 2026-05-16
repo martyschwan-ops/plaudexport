@@ -137,6 +137,21 @@ app.get('/api/recordings', async (_req, res) => {
   }
 });
 
+// ── Debug (inspect raw API response for one recording) ───────────────────────
+
+app.get('/api/debug/:id', async (req, res) => {
+  if (!session.token) return res.status(401).json({ error: 'Not logged in' });
+  try {
+    const { data } = await axios.get(`${apiBase()}/file/detail/${req.params.id}`, {
+      headers: authHeaders(),
+      timeout: 20000,
+    });
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── Export ZIP ────────────────────────────────────────────────────────────────
 
 app.post('/api/export', async (req, res) => {
@@ -163,10 +178,13 @@ app.post('/api/export', async (req, res) => {
 
   for (const id of ids) {
     try {
-      const { data: detail } = await axios.get(`${apiBase()}/file/detail/${id}`, {
+      const { data: raw } = await axios.get(`${apiBase()}/file/detail/${id}`, {
         headers: authHeaders(),
         timeout: 20000,
       });
+
+      // Unwrap envelope — API may return { data_file: {...} } or the object directly
+      const detail = raw.data_file || raw.data || raw;
 
       const name = sanitize(
         detail.file_name || detail.filename || detail.fullname || id
