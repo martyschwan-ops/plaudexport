@@ -1,6 +1,7 @@
 const express = require('express');
 const axios = require('axios');
 const archiver = require('archiver');
+const zlib = require('zlib');
 const path = require('path');
 
 const app = express();
@@ -12,7 +13,6 @@ const REGIONS = {
   eu: 'https://api-euc1.plaud.ai',
 };
 
-// Single-user in-memory session
 let session = { token: null, region: 'us' };
 
 function apiBase() {
@@ -34,14 +34,76 @@ function sanitize(name) {
     .trim() || 'untitled';
 }
 
-function formatDuration(seconds) {
-  if (!seconds) return '';
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  const s = Math.floor(seconds % 60);
+function formatDuration(ms) {
+  if (!ms) return '';
+  const totalSec = Math.floor(ms / 1000);
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
   if (h > 0) return `${h}h ${m}m ${s}s`;
   if (m > 0) return `${m}m ${s}s`;
   return `${s}s`;
+}
+
+// Fetch a URL and decompress if gzipped
+async function fetchContent(url) {
+  const resp = await axios.get(url, { responseType: 'arraybuffer', timeout: 30000 });
+  const buf = Buffer.from(resp.data);
+  // Detect gzip magic bytes
+  if (buf[0] === 0x1f && buf[1] === 0x8b) {
+    return new Promise((resolve, reject) => {
+      zlib.gunzip(buf, (err, result) => {
+        if (err) reject(err);
+        else resolve(result.toString('utf8'));
+      });
+    });
+  }
+  return buf.toString('utf8');
+}
+
+// Parse Plaud's transcript JSON into readable text
+function parseTranscriptJson(json) {
+  let segments = null;
+  if (Array.isArray(json)) {
+    segments = json;
+  } else if (json.utterances) {
+    segments = json.utterances;
+  } else if (json.segments) {
+    segments = json.segments;
+  } else if (typeof json.transcript === 'string') {
+    return json.transcript;
+  }
+
+  if (!segments) return JSON.stringify(json, null, 2);
+
+  return segments.map((seg) => {
+    const rawSpeaker = seg.speaker ?? seg.speaker_id;
+    const speaker = rawSpeaker !== undefined && rawSpeaker !== null
+      ? `Speaker ${rawSpeaker}`
+      : null;
+    const text = seg.text || seg.transcript || seg.content || '';
+    if (!text) return null;
+    return speaker ? `[${speaker}] ${text}` : text;
+  }).filter(Boolean).join('\n');
+}
+
+// Extract the AI summary markdown from pre_download_content_list
+function extractSummary(preList) {
+  const parts = [];
+  for (const item of preList) {
+    if (!item.data_content) continue;
+    try {
+      const parsed = JSON.parse(item.data_content);
+      if (parsed.ai_content) {
+        // Strip embedded image references (![...](...))
+        const text = parsed.ai_content.replace(/!\[.*?\]\(.*?\)\n*/g, '').trim();
+        if (text) parts.push(text);
+      }
+    } catch {
+      parts.push(item.data_content);
+    }
+  }
+  return parts.join('\n\n');
 }
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
@@ -70,7 +132,6 @@ app.post('/api/login', async (req, res) => {
 app.post('/api/login-token', async (req, res) => {
   const { token, region = 'us' } = req.body;
   if (!token) return res.status(400).json({ error: 'Token is required' });
-  // Verify the token works by hitting /user/me
   const base = REGIONS[region] || REGIONS.us;
   try {
     await axios.get(`${base}/user/me`, {
@@ -123,13 +184,11 @@ app.get('/api/recordings', async (_req, res) => {
       .map((f) => ({
         id: f.file_id || f.id,
         name: f.file_name || f.filename || f.fullname || 'Untitled',
-        fullname: f.fullname,
-        duration: f.duration,
+        duration: f.duration, // milliseconds
         start_time: f.start_time,
         filesize: f.filesize,
         is_trans: f.is_trans,
         is_summary: f.is_summary,
-        serial_number: f.serial_number,
       }));
     res.json(files);
   } catch (err) {
@@ -137,7 +196,7 @@ app.get('/api/recordings', async (_req, res) => {
   }
 });
 
-// ── Debug (inspect raw API response for one recording) ───────────────────────
+// ── Debug ─────────────────────────────────────────────────────────────────────
 
 app.get('/api/debug/:id', async (req, res) => {
   if (!session.token) return res.status(401).json({ error: 'Not logged in' });
@@ -162,18 +221,13 @@ app.post('/api/export', async (req, res) => {
 
   const timestamp = new Date().toISOString().split('T')[0];
   res.setHeader('Content-Type', 'application/zip');
-  res.setHeader(
-    'Content-Disposition',
-    `attachment; filename="plaud-export-${timestamp}.zip"`
-  );
+  res.setHeader('Content-Disposition', `attachment; filename="plaud-export-${timestamp}.zip"`);
 
   const archive = archiver('zip', { zlib: { level: 6 } });
-
   archive.on('error', (err) => {
     console.error('Archive error:', err);
     if (!res.headersSent) res.status(500).end();
   });
-
   archive.pipe(res);
 
   for (const id of ids) {
@@ -183,42 +237,48 @@ app.post('/api/export', async (req, res) => {
         timeout: 20000,
       });
 
-      // Unwrap envelope — API may return { data_file: {...} } or the object directly
-      const detail = raw.data_file || raw.data || raw;
+      // API wraps response: { status, data: { file_id, file_name, content_list, ... } }
+      const detail = raw.data || raw;
 
-      const name = sanitize(
-        detail.file_name || detail.filename || detail.fullname || id
-      );
+      const name = sanitize(detail.file_name || detail.filename || id);
       const date = detail.start_time
         ? new Date(detail.start_time).toISOString().split('T')[0]
         : 'unknown';
       const folder = `${date} - ${name}`;
 
       if (includeTranscript) {
-        const items = detail.pre_download_content_list || [];
-        const transcriptBody = items
-          .map((i) => i.data_content || '')
-          .filter(Boolean)
-          .join('\n\n');
-
-        const summary = detail.data_summary || detail.summary || '';
-
-        const lines = [
-          `Title: ${detail.file_name || detail.filename || id}`,
+        const header = [
+          `Title: ${detail.file_name || id}`,
           `Date: ${date}`,
           `Duration: ${formatDuration(detail.duration)}`,
-        ];
-        if (detail.serial_number) lines.push(`Device: ${detail.serial_number}`);
-        lines.push('');
+          '',
+        ].join('\n');
 
-        let content = lines.join('\n');
+        let transcriptText = '';
+        let summaryText = '';
 
-        if (summary) {
-          content += `${'─'.repeat(60)}\nSUMMARY\n${'─'.repeat(60)}\n${summary}\n\n`;
+        // Fetch transcript from S3 (content_list entry with data_type 'transaction')
+        const contentList = detail.content_list || [];
+        const transItem = contentList.find((c) => c.data_type === 'transaction');
+        if (transItem?.data_link) {
+          try {
+            const raw = await fetchContent(transItem.data_link);
+            const json = JSON.parse(raw);
+            transcriptText = parseTranscriptJson(json);
+          } catch (e) {
+            console.warn(`Transcript fetch failed for ${id}:`, e.message);
+          }
         }
 
-        if (transcriptBody) {
-          content += `${'─'.repeat(60)}\nTRANSCRIPT\n${'─'.repeat(60)}\n${transcriptBody}\n`;
+        // Extract summary from pre_download_content_list (already embedded in response)
+        summaryText = extractSummary(detail.pre_download_content_list || []);
+
+        let content = header;
+        if (summaryText) {
+          content += `${'─'.repeat(60)}\nSUMMARY\n${'─'.repeat(60)}\n${summaryText}\n\n`;
+        }
+        if (transcriptText) {
+          content += `${'─'.repeat(60)}\nTRANSCRIPT\n${'─'.repeat(60)}\n${transcriptText}\n`;
         } else {
           content += '(No transcript available)\n';
         }
@@ -232,19 +292,13 @@ app.post('/api/export', async (req, res) => {
             `${apiBase()}/file/temp-url/${id}?is_opus=false`,
             { headers: authHeaders(), timeout: 15000 }
           );
-          const audioUrl =
-            urlData.url ||
-            urlData?.data?.url ||
-            urlData?.data ||
-            urlData?.temp_url;
-
+          const audioUrl = urlData.url || urlData?.data?.url || urlData?.data || urlData?.temp_url;
           if (audioUrl) {
             const audioStream = await axios.get(audioUrl, {
               responseType: 'stream',
-              timeout: 300000, // 5 min for large files
+              timeout: 300000,
             });
             archive.append(audioStream.data, { name: `${folder}/audio.mp3` });
-            // Wait for stream to be consumed before moving on
             await new Promise((resolve, reject) => {
               audioStream.data.on('end', resolve);
               audioStream.data.on('error', reject);
@@ -259,9 +313,7 @@ app.post('/api/export', async (req, res) => {
       }
     } catch (err) {
       console.warn(`Failed to process recording ${id}:`, err.message);
-      archive.append(`Export failed: ${err.message}\n`, {
-        name: `failed/${id}.txt`,
-      });
+      archive.append(`Export failed: ${err.message}\n`, { name: `failed/${id}.txt` });
     }
   }
 
