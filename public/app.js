@@ -134,8 +134,8 @@ tokenForm.addEventListener('submit', async (e) => {
 });
 
 async function enterApp() {
-  loginScreen.hidden = true;
-  appScreen.hidden = false;
+  loginScreen.style.display = 'none';
+  appScreen.style.display = 'flex';
 
   // Fetch user info
   try {
@@ -157,8 +157,8 @@ logoutBtn.addEventListener('click', async () => {
   state.filtered = [];
   state.selected.clear();
   recordingsList.innerHTML = '';
-  loginScreen.hidden = false;
-  appScreen.hidden = true;
+  loginScreen.style.display = 'flex';
+  appScreen.style.display = 'none';
   loginForm.reset();
 });
 
