@@ -339,3 +339,14 @@ exportBtn.addEventListener('click', async () => {
     exportBtn.textContent = 'Export Selected';
   }
 });
+
+/* ── Auto-login on page load ─────────────────────────────────────────────── */
+
+(async () => {
+  try {
+    const { active } = await api('GET', '/api/session');
+    if (active) await enterApp();
+  } catch {
+    // No saved session, stay on login screen
+  }
+})();

@@ -3,6 +3,8 @@ const axios = require('axios');
 const archiver = require('archiver');
 const zlib = require('zlib');
 const path = require('path');
+const fs = require('fs');
+const os = require('os');
 
 const app = express();
 app.use(express.json());
@@ -13,7 +15,22 @@ const REGIONS = {
   eu: 'https://api-euc1.plaud.ai',
 };
 
-let session = { token: null, region: 'us' };
+const CONFIG_PATH = path.join(os.homedir(), '.plaud-exporter.json');
+
+function loadConfig() {
+  try {
+    return JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
+  } catch {
+    return {};
+  }
+}
+
+function saveConfig(data) {
+  fs.writeFileSync(CONFIG_PATH, JSON.stringify(data, null, 2), { mode: 0o600 });
+}
+
+const saved = loadConfig();
+let session = { token: saved.token || null, region: saved.region || 'us' };
 
 function apiBase() {
   return REGIONS[session.region] || REGIONS.us;
@@ -119,6 +136,7 @@ app.post('/api/login', async (req, res) => {
     });
     if (data.status === 0 && data.access_token) {
       session = { token: data.access_token, region };
+      saveConfig(session);
       res.json({ ok: true });
     } else {
       res.status(401).json({ error: 'Invalid credentials' });
@@ -139,6 +157,7 @@ app.post('/api/login-token', async (req, res) => {
       timeout: 10000,
     });
     session = { token, region };
+    saveConfig(session);
     res.json({ ok: true });
   } catch (err) {
     const status = err.response?.status;
@@ -152,7 +171,12 @@ app.post('/api/login-token', async (req, res) => {
 
 app.post('/api/logout', (_req, res) => {
   session = { token: null, region: 'us' };
+  saveConfig({});
   res.json({ ok: true });
+});
+
+app.get('/api/session', (_req, res) => {
+  res.json({ active: !!session.token });
 });
 
 // ── User ──────────────────────────────────────────────────────────────────────
