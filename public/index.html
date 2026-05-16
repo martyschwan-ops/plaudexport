@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Plaud Exporter</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- ── Login ─────────────────────────────────────────────────────────── -->
+  <div id="login-screen">
+    <div class="login-card">
+      <div class="login-logo">
+        <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
+          <rect width="40" height="40" rx="10" fill="#3b82f6"/>
+          <path d="M10 28V12l10 8 10-8v16" stroke="white" stroke-width="2.5"
+                stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <span>Plaud Exporter</span>
+      </div>
+      <p class="login-subtitle">Bulk export your meeting transcripts</p>
+      <form id="login-form">
+        <div class="field">
+          <label for="email">Email</label>
+          <input type="email" id="email" autocomplete="email"
+                 placeholder="you@example.com" required>
+        </div>
+        <div class="field">
+          <label for="password">Password</label>
+          <input type="password" id="password" autocomplete="current-password"
+                 placeholder="••••••••" required>
+        </div>
+        <div class="field">
+          <label for="region">Region</label>
+          <select id="region">
+            <option value="us">United States</option>
+            <option value="eu">Europe (EU)</option>
+          </select>
+        </div>
+        <p id="login-error" class="error" hidden></p>
+        <button type="submit" id="login-btn" class="btn-primary">Sign In</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ── Main App ───────────────────────────────────────────────────────── -->
+  <div id="app-screen" hidden>
+    <header class="topbar">
+      <div class="topbar-brand">
+        <svg width="24" height="24" viewBox="0 0 40 40" fill="none">
+          <rect width="40" height="40" rx="10" fill="#3b82f6"/>
+          <path d="M10 28V12l10 8 10-8v16" stroke="white" stroke-width="2.5"
+                stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <span>Plaud Exporter</span>
+      </div>
+      <div class="topbar-user">
+        <span id="user-label"></span>
+        <button id="logout-btn" class="btn-ghost">Logout</button>
+      </div>
+    </header>
+
+    <div class="app-body">
+
+      <!-- Recordings panel -->
+      <div class="recordings-panel">
+        <div class="panel-head">
+          <div class="panel-title-row">
+            <h2>Recordings</h2>
+            <span id="total-badge" class="badge" hidden></span>
+          </div>
+          <div class="search-row">
+            <input type="search" id="search-input" placeholder="Filter by name…">
+          </div>
+          <div class="bulk-row">
+            <button id="select-all-btn" class="btn-link">Select all</button>
+            <button id="deselect-all-btn" class="btn-link">Deselect all</button>
+            <span id="selected-label" class="selected-label"></span>
+          </div>
+        </div>
+
+        <div id="recordings-container">
+          <div class="state-msg" id="loading-msg">
+            <div class="spinner"></div>
+            Loading recordings…
+          </div>
+          <div class="state-msg" id="empty-msg" hidden>No recordings found.</div>
+          <div class="state-msg error" id="list-error-msg" hidden></div>
+          <ul id="recordings-list"></ul>
+        </div>
+      </div>
+
+      <!-- Export sidebar -->
+      <aside class="export-panel">
+        <h2>Export</h2>
+
+        <div class="export-selection">
+          <span id="export-count">0</span> recording(s) selected
+        </div>
+
+        <div class="option-group">
+          <p class="option-group-label">Include in ZIP</p>
+          <label class="toggle-label">
+            <input type="checkbox" id="include-transcript" checked>
+            <span>
+              <strong>Transcripts</strong>
+              <small>Plain text (.txt)</small>
+            </span>
+          </label>
+          <label class="toggle-label">
+            <input type="checkbox" id="include-audio">
+            <span>
+              <strong>Audio files</strong>
+              <small>MP3 — may be large</small>
+            </span>
+          </label>
+        </div>
+
+        <p id="export-error" class="error" hidden></p>
+
+        <button id="export-btn" class="btn-primary full-width" disabled>
+          Export Selected
+        </button>
+
+        <p class="export-note">
+          Downloads a ZIP with one folder per recording, named by date and title.
+        </p>
+      </aside>
+
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

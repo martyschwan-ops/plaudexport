@@ -1,0 +1,15 @@
+{
+  "name": "plaud-exporter",
+  "version": "1.0.0",
+  "description": "Web-based bulk export tool for Plaud meeting transcripts",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "archiver": "^7.0.1",
+    "axios": "^1.7.7",
+    "express": "^4.21.1"
+  }
+}
