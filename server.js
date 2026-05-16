@@ -67,6 +67,28 @@ app.post('/api/login', async (req, res) => {
   }
 });
 
+app.post('/api/login-token', async (req, res) => {
+  const { token, region = 'us' } = req.body;
+  if (!token) return res.status(400).json({ error: 'Token is required' });
+  // Verify the token works by hitting /user/me
+  const base = REGIONS[region] || REGIONS.us;
+  try {
+    await axios.get(`${base}/user/me`, {
+      headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+      timeout: 10000,
+    });
+    session = { token, region };
+    res.json({ ok: true });
+  } catch (err) {
+    const status = err.response?.status;
+    if (status === 401 || status === 403) {
+      res.status(401).json({ error: 'Token rejected by Plaud — it may have expired.' });
+    } else {
+      res.status(401).json({ error: `Could not verify token: ${err.message}` });
+    }
+  }
+});
+
 app.post('/api/logout', (_req, res) => {
   session = { token: null, region: 'us' };
   res.json({ ok: true });

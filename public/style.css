@@ -92,6 +92,107 @@ body {
   box-shadow: 0 0 0 3px rgba(59,130,246,.15);
 }
 
+.field textarea {
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 12px;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  background: var(--bg);
+  color: var(--text);
+  resize: vertical;
+  outline: none;
+  transition: border-color .15s;
+}
+
+.field textarea:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(59,130,246,.15);
+}
+
+/* ── Login tabs ───────────────────────────────────────────────────────────── */
+
+.login-tabs {
+  display: flex;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  margin-bottom: 20px;
+}
+
+.login-tab {
+  flex: 1;
+  padding: 8px;
+  background: none;
+  border: none;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background .15s, color .15s;
+}
+
+.login-tab:not(:last-child) {
+  border-right: 1px solid var(--border);
+}
+
+.login-tab.active {
+  background: var(--accent);
+  color: white;
+}
+
+.login-tab:not(.active):hover {
+  background: var(--bg);
+  color: var(--text);
+}
+
+/* ── Token help ───────────────────────────────────────────────────────────── */
+
+.token-help {
+  margin-bottom: 12px;
+  font-size: 13px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  background: var(--bg);
+}
+
+.token-help summary {
+  cursor: pointer;
+  font-weight: 500;
+  color: var(--text-muted);
+  user-select: none;
+}
+
+.token-help ol {
+  margin: 10px 0 6px 16px;
+  line-height: 1.7;
+  color: var(--text);
+}
+
+.token-help p {
+  margin-top: 6px;
+  color: var(--text-muted);
+}
+
+.token-help code {
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 12px;
+  background: var(--border);
+  padding: 1px 4px;
+  border-radius: 4px;
+}
+
+.token-help kbd {
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 11px;
+  background: #e2e8f0;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+
 /* ── Buttons ─────────────────────────────────────────────────────────────── */
 
 .btn-primary {

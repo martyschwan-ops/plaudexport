@@ -30,6 +30,9 @@ const exportBtn       = $('export-btn');
 const exportError     = $('export-error');
 const includeTranscript = $('include-transcript');
 const includeAudio      = $('include-audio');
+const tokenForm       = $('token-form');
+const tokenBtn        = $('token-btn');
+const tokenError      = $('token-error');
 
 /* ── Utilities ───────────────────────────────────────────────────────────── */
 
@@ -58,6 +61,19 @@ function showError(el, msg) {
 function hideError(el) {
   el.hidden = true;
 }
+
+/* ── Login tabs ──────────────────────────────────────────────────────────── */
+
+document.querySelectorAll('.login-tab').forEach((tab) => {
+  tab.addEventListener('click', () => {
+    const target = tab.dataset.tab;
+    document.querySelectorAll('.login-tab').forEach((t) => t.classList.toggle('active', t === tab));
+    loginForm.hidden = target !== 'password';
+    tokenForm.hidden = target !== 'token';
+    hideError(loginError);
+    hideError(tokenError);
+  });
+});
 
 async function api(method, path, body) {
   const opts = {
@@ -91,6 +107,29 @@ loginForm.addEventListener('submit', async (e) => {
   } finally {
     loginBtn.disabled = false;
     loginBtn.textContent = 'Sign In';
+  }
+});
+
+tokenForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  hideError(tokenError);
+  const token = $('bearer-token').value.trim();
+  if (!token) { showError(tokenError, 'Please paste your bearer token.'); return; }
+
+  tokenBtn.disabled = true;
+  tokenBtn.innerHTML = '<div class="spinner"></div> Connecting…';
+
+  try {
+    await api('POST', '/api/login-token', {
+      token,
+      region: $('token-region').value,
+    });
+    await enterApp();
+  } catch (err) {
+    showError(tokenError, err.message);
+  } finally {
+    tokenBtn.disabled = false;
+    tokenBtn.textContent = 'Connect';
   }
 });
 
