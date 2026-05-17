@@ -203,7 +203,8 @@ app.get('/api/recordings', async (_req, res) => {
       headers: authHeaders(),
       timeout: 30000,
     });
-    const files = (data.data_file_list || [])
+    const payload = data.data || data;
+    const files = (payload.data_file_list || [])
       .filter((f) => !f.is_trash)
       .map((f) => ({
         id: f.file_id || f.id,
