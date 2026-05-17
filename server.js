@@ -199,16 +199,36 @@ app.get('/api/me', async (_req, res) => {
 app.get('/api/recordings', async (_req, res) => {
   if (!session.token) return res.status(401).json({ error: 'Not logged in' });
   try {
-    const { data } = await axios.get(`${apiBase()}/file/simple/web`, {
-      headers: authHeaders(),
-      timeout: 30000,
-    });
-    const files = (data.data_file_list || [])
+    const allFiles = [];
+    let page = 1;
+    const pageSize = 100;
+
+    while (true) {
+      const { data } = await axios.get(`${apiBase()}/file/simple/web`, {
+        headers: authHeaders(),
+        params: { page, page_size: pageSize },
+        timeout: 30000,
+      });
+
+      // Handle both flat and wrapped response shapes:
+      //   { data_file_list: [...] }
+      //   { status, data: { data_file_list: [...] } }
+      const payload = data.data_file_list ? data : (data.data || {});
+      const batch = payload.data_file_list || [];
+
+      allFiles.push(...batch);
+
+      // Stop if we got fewer results than the page size (last page)
+      if (batch.length < pageSize) break;
+      page++;
+    }
+
+    const files = allFiles
       .filter((f) => !f.is_trash)
       .map((f) => ({
         id: f.file_id || f.id,
         name: f.file_name || f.filename || f.fullname || 'Untitled',
-        duration: f.duration, // milliseconds
+        duration: f.duration,
         start_time: f.start_time,
         filesize: f.filesize,
         is_trans: f.is_trans,
@@ -221,6 +241,20 @@ app.get('/api/recordings', async (_req, res) => {
 });
 
 // ── Debug ─────────────────────────────────────────────────────────────────────
+
+app.get('/api/debug/recordings-raw', async (_req, res) => {
+  if (!session.token) return res.status(401).json({ error: 'Not logged in' });
+  try {
+    const { data } = await axios.get(`${apiBase()}/file/simple/web`, {
+      headers: authHeaders(),
+      params: { page: 1, page_size: 5 },
+      timeout: 30000,
+    });
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: err.message, response: err.response?.data });
+  }
+});
 
 app.get('/api/debug/:id', async (req, res) => {
   if (!session.token) return res.status(401).json({ error: 'Not logged in' });
