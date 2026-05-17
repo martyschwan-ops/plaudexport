@@ -208,12 +208,16 @@ app.get('/api/recordings', async (_req, res) => {
         timeout: 30000,
       });
 
+      // Plaud returns HTTP 200 with a status field in the body for errors
       if (data.status !== undefined && data.status !== 0) {
         const msg = data.msg || `API error ${data.status}`;
         const isExpired = data.status === -419 || /expired|unauthorized/i.test(msg);
         return res.status(isExpired ? 401 : 502).json({ error: isExpired ? 'Session expired — please log out and sign in again.' : msg });
       }
 
+      // Handle both flat and wrapped response shapes:
+      //   { data_file_list: [...] }
+      //   { status, data: { data_file_list: [...] } }
       const payload = data.data_file_list ? data : (data.data || {});
       const batch = payload.data_file_list || [];
 
