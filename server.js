@@ -66,7 +66,6 @@ function formatDuration(ms) {
 async function fetchContent(url) {
   const resp = await axios.get(url, { responseType: 'arraybuffer', timeout: 30000 });
   const buf = Buffer.from(resp.data);
-  // Detect gzip magic bytes
   if (buf[0] === 0x1f && buf[1] === 0x8b) {
     return new Promise((resolve, reject) => {
       zlib.gunzip(buf, (err, result) => {
@@ -112,7 +111,6 @@ function extractSummary(preList) {
     try {
       const parsed = JSON.parse(item.data_content);
       if (parsed.ai_content) {
-        // Strip embedded image references (![...](...))
         const text = parsed.ai_content.replace(/!\[.*?\]\(.*?\)\n*/g, '').trim();
         if (text) parts.push(text);
       }
@@ -199,16 +197,38 @@ app.get('/api/me', async (_req, res) => {
 app.get('/api/recordings', async (_req, res) => {
   if (!session.token) return res.status(401).json({ error: 'Not logged in' });
   try {
-    const { data } = await axios.get(`${apiBase()}/file/simple/web`, {
-      headers: authHeaders(),
-      timeout: 30000,
-    });
-    const files = (data.data_file_list || [])
+    const allFiles = [];
+    let page = 1;
+    const pageSize = 100;
+
+    while (true) {
+      const { data } = await axios.get(`${apiBase()}/file/simple/web`, {
+        headers: authHeaders(),
+        params: { page, page_size: pageSize },
+        timeout: 30000,
+      });
+
+      if (data.status !== undefined && data.status !== 0) {
+        const msg = data.msg || `API error ${data.status}`;
+        const isExpired = data.status === -419 || /expired|unauthorized/i.test(msg);
+        return res.status(isExpired ? 401 : 502).json({ error: isExpired ? 'Session expired — please log out and sign in again.' : msg });
+      }
+
+      const payload = data.data_file_list ? data : (data.data || {});
+      const batch = payload.data_file_list || [];
+
+      allFiles.push(...batch);
+
+      if (batch.length < pageSize) break;
+      page++;
+    }
+
+    const files = allFiles
       .filter((f) => !f.is_trash)
       .map((f) => ({
         id: f.file_id || f.id,
         name: f.file_name || f.filename || f.fullname || 'Untitled',
-        duration: f.duration, // milliseconds
+        duration: f.duration,
         start_time: f.start_time,
         filesize: f.filesize,
         is_trans: f.is_trans,
@@ -221,6 +241,20 @@ app.get('/api/recordings', async (_req, res) => {
 });
 
 // ── Debug ─────────────────────────────────────────────────────────────────────
+
+app.get('/api/debug/recordings-raw', async (_req, res) => {
+  if (!session.token) return res.status(401).json({ error: 'Not logged in' });
+  try {
+    const { data } = await axios.get(`${apiBase()}/file/simple/web`, {
+      headers: authHeaders(),
+      params: { page: 1, page_size: 5 },
+      timeout: 30000,
+    });
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: err.message, response: err.response?.data });
+  }
+});
 
 app.get('/api/debug/:id', async (req, res) => {
   if (!session.token) return res.status(401).json({ error: 'Not logged in' });
@@ -261,7 +295,6 @@ app.post('/api/export', async (req, res) => {
         timeout: 20000,
       });
 
-      // API wraps response: { status, data: { file_id, file_name, content_list, ... } }
       const detail = raw.data || raw;
 
       const name = sanitize(detail.file_name || detail.filename || id);
@@ -281,7 +314,6 @@ app.post('/api/export', async (req, res) => {
         let transcriptText = '';
         let summaryText = '';
 
-        // Fetch transcript from S3 (content_list entry with data_type 'transaction')
         const contentList = detail.content_list || [];
         const transItem = contentList.find((c) => c.data_type === 'transaction');
         if (transItem?.data_link) {
@@ -294,7 +326,6 @@ app.post('/api/export', async (req, res) => {
           }
         }
 
-        // Extract summary from pre_download_content_list (already embedded in response)
         summaryText = extractSummary(detail.pre_download_content_list || []);
 
         let content = header;
