@@ -199,13 +199,14 @@ app.get('/api/recordings', async (_req, res) => {
   try {
     const allFiles = [];
     let page = 1;
-    const pageSize = 100;
+    const pageSize = 50;
+    const MAX_PAGES = 40; // safety cap: 40 × 50 = 2000 recordings max
 
-    while (true) {
+    while (page <= MAX_PAGES) {
       const { data } = await axios.get(`${apiBase()}/file/simple/web`, {
         headers: authHeaders(),
         params: { page, page_size: pageSize },
-        timeout: 30000,
+        timeout: 20000,
       });
 
       // Plaud returns HTTP 200 with a status field in the body for errors
@@ -222,6 +223,7 @@ app.get('/api/recordings', async (_req, res) => {
       const batch = payload.data_file_list || [];
 
       allFiles.push(...batch);
+      console.log(`  Recordings page ${page}: got ${batch.length}`);
 
       if (batch.length < pageSize) break;
       page++;
